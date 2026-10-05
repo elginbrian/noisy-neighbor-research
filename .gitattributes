@@ -1,0 +1,19 @@
+# Normalisasi line ending
+* text=auto
+
+# Skrip yang dijalankan di Linux WAJIB LF.
+# Tanpa ini, Git di Windows dapat mengubahnya menjadi CRLF dan user_data EC2 gagal berjalan.
+*.sh  text eol=lf
+*.tf  text eol=lf
+*.tfvars text eol=lf
+*.py  text eol=lf
+*.jmx text eol=lf
+Dockerfile text eol=lf
+
+# Skrip Windows
+*.ps1 text eol=crlf
+
+# Biner
+*.png binary
+*.jpg binary
+*.pdf binary

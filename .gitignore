@@ -1,0 +1,69 @@
+# ==============================================================
+# Terraform
+# ==============================================================
+**/.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+*.tfplan
+tfplan
+
+# Nilai variabel (berisi IP pribadi dan email); contoh template boleh di-commit
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+
+# .terraform.lock.hcl SENGAJA tidak diabaikan (mengunci versi provider)
+
+# ==============================================================
+# Kredensial dan rahasia
+# ==============================================================
+*.pem
+*.key
+*.ppk
+id_rsa*
+id_ed25519*
+!*.pub.example
+.env
+.env.*
+!.env.example
+.aws/
+credentials
+secrets.*
+
+# ==============================================================
+# Hasil eksperimen (data mentah dibackup terpisah, bukan di Git)
+# ==============================================================
+results/
+*.jtl
+jmeter.log
+*.log
+
+# ==============================================================
+# Python
+# ==============================================================
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ipynb_checkpoints/
+*.egg-info/
+
+# ==============================================================
+# Editor dan OS
+# ==============================================================
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
