@@ -72,7 +72,7 @@ Fill in `terraform/terraform.tfvars`:
 |---|---|
 | `allowed_ssh_cidr` | Your public IP suffixed with `/32`. `0.0.0.0/0` is rejected by validation |
 | `budget_email` | Recipient email for AWS Budget notifications |
-| `region` | Default is `us-east-1` |
+| `region` | Default is `ap-southeast-2` |
 
 ### 3. Local validation
 

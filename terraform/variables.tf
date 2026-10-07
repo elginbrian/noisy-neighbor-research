@@ -1,7 +1,7 @@
 variable "region" {
   description = "Region AWS tempat infrastruktur dibuat"
   type        = string
-  default     = "us-east-1"
+  default     = "ap-southeast-2"
 }
 
 variable "vpc_cidr" {
@@ -17,12 +17,12 @@ variable "subnet_cidr" {
 }
 
 variable "allowed_ssh_cidr" {
-  description = "IP publik peneliti yang boleh SSH, format x.x.x.x/32"
+  description = "CIDR yang boleh SSH (x.x.x.x/32 untuk satu IP, 0.0.0.0/0 untuk semua IP)"
   type        = string
 
   validation {
-    condition     = can(cidrhost(var.allowed_ssh_cidr, 0)) && var.allowed_ssh_cidr != "0.0.0.0/0"
-    error_message = "Gunakan CIDR yang valid dan jangan membuka SSH ke seluruh internet (0.0.0.0/0)."
+    condition     = can(cidrhost(var.allowed_ssh_cidr, 0))
+    error_message = "Gunakan format CIDR yang valid, misalnya 1.2.3.4/32 atau 0.0.0.0/0."
   }
 }
 
@@ -35,7 +35,7 @@ variable "public_key_path" {
 variable "target_instance_type" {
   description = "Tipe instance Target Node (Tabel 3.2.1)"
   type        = string
-  default     = "t2.small"
+  default     = "t3.small"
 }
 
 variable "attacker_instance_type" {
