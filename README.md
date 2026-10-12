@@ -29,7 +29,8 @@ noisy-neighbor-research/
 │       ├── target_instance.sh      # Docker 27.x, cgroups v2, swap off, sysstat, psutil
 │       └── tester_instance.sh      # JRE, JMeter 5.6.3, Python
 ├── scripts/
-│   ├── deploy.ps1                  # terraform apply + wait for bootstrap
+│   ├── deploy.ps1                  # terraform apply + sync code + build images + verifikasi + interactive launch
+│   ├── pull_results.ps1            # tarik hasil eksperimen dari Tester ke lokal tanpa destroy
 │   └── destroy.ps1                 # pull results then terraform destroy
 ├── apps/                           # aggressor, victim
 ├── monitoring/                     # tracker script (Target Instance)
