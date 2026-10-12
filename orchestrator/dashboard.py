@@ -20,8 +20,10 @@ from typing import Dict, List, Optional
 class ExperimentState:
     """Menyimpan status eksekusi eksperimen yang dibaca oleh dashboard web."""
 
-    def __init__(self):
+    def __init__(self, state_file: Optional[Path] = None, results_dir: Optional[Path] = None):
         self.lock = threading.Lock()
+        self.state_file = state_file
+        self.results_dir = results_dir
         self.status = "IDLE"  # IDLE, RUNNING, COMPLETED, FAILED
         self.mode = "PILOT"
         self.total_sessions = 0
@@ -32,6 +34,18 @@ class ExperimentState:
         self.started_at: Optional[float] = None
         self.finished_at: Optional[float] = None
         self.history: List[Dict] = []
+        self._sync_file()
+
+    def _sync_file(self):
+        """Menyimpan status ke state_file agar dapat dibaca dashboard yang berjalan terpisah."""
+        if not self.state_file:
+            return
+        try:
+            self.state_file.parent.mkdir(parents=True, exist_ok=True)
+            with open(self.state_file, "w", encoding="utf-8") as f:
+                json.dump(self._build_dict(), f, indent=2)
+        except Exception:
+            pass
 
     def start_experiment(self, mode: str, total: int):
         with self.lock:
@@ -42,15 +56,18 @@ class ExperimentState:
             self.failed_count = 0
             self.started_at = time.time()
             self.finished_at = None
+        self._sync_file()
 
     def set_current_session(self, session: Dict, stage: str):
         with self.lock:
             self.current_session = session
             self.current_stage = stage
+        self._sync_file()
 
     def update_stage(self, stage: str):
         with self.lock:
             self.current_stage = stage
+        self._sync_file()
 
     def complete_session(self, result: Optional[Dict]):
         with self.lock:
@@ -60,15 +77,18 @@ class ExperimentState:
             else:
                 self.failed_count += 1
             self.current_stage = "Sesi selesai."
+        self._sync_file()
 
     def finish_experiment(self, status: str = "COMPLETED"):
         with self.lock:
             self.status = status
             self.finished_at = time.time()
             self.current_stage = "Seluruh pengujian telah selesai."
+        self._sync_file()
 
     def load_existing_results(self, results_dir: Path):
         """Memuat riwayat sesi yang sudah ada di direktori results (untuk mode standalone)."""
+        self.results_dir = results_dir
         if not results_dir.exists():
             return
         combined_files = sorted(results_dir.glob("combined_*.json"))
@@ -85,30 +105,42 @@ class ExperimentState:
                 self.total_sessions = self.completed_count
                 self.status = "COMPLETED"
                 self.current_stage = f"{self.completed_count} sesi hasil pengujian telah dimuat."
+        self._sync_file()
+
+    def _build_dict(self) -> Dict:
+        elapsed = 0
+        if self.started_at:
+            end = self.finished_at or time.time()
+            elapsed = round(end - self.started_at, 1)
+
+        pct = 0.0
+        if self.total_sessions > 0:
+            pct = round((self.completed_count / self.total_sessions) * 100.0, 1)
+
+        return {
+            "status": self.status,
+            "mode": self.mode,
+            "total_sessions": self.total_sessions,
+            "completed_count": self.completed_count,
+            "failed_count": self.failed_count,
+            "progress_pct": pct,
+            "elapsed_sec": elapsed,
+            "current_stage": self.current_stage,
+            "current_session": self.current_session,
+            "history": self.history,
+        }
 
     def to_dict(self) -> Dict:
+        # Jika state_file tersedia dan ditulis oleh runner lain, baca dari file
+        if self.state_file and self.state_file.exists():
+            try:
+                with open(self.state_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                return data
+            except Exception:
+                pass
         with self.lock:
-            elapsed = 0
-            if self.started_at:
-                end = self.finished_at or time.time()
-                elapsed = round(end - self.started_at, 1)
-
-            pct = 0.0
-            if self.total_sessions > 0:
-                pct = round((self.completed_count / self.total_sessions) * 100.0, 1)
-
-            return {
-                "status": self.status,
-                "mode": self.mode,
-                "total_sessions": self.total_sessions,
-                "completed_count": self.completed_count,
-                "failed_count": self.failed_count,
-                "progress_pct": pct,
-                "elapsed_sec": elapsed,
-                "current_stage": self.current_stage,
-                "current_session": self.current_session,
-                "history": self.history,
-            }
+            return self._build_dict()
 
 
 TEMPLATE_PATH = Path(__file__).resolve().parent / "templates" / "index.html"
@@ -191,12 +223,17 @@ def make_handler(state: ExperimentState, results_dir: Path):
     return lambda *args, **kwargs: DashboardHandler(state, results_dir, *args, **kwargs)
 
 
-def start_dashboard_server(state: ExperimentState, results_dir: Path, port: int = 8080) -> HTTPServer:
+def start_dashboard_server(state: ExperimentState, results_dir: Path, port: int = 8080) -> Optional[HTTPServer]:
     """Menjalankan server dashboard di latar belakang (daemon thread)."""
-    server = HTTPServer(("0.0.0.0", port), make_handler(state, results_dir))
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    return server
+    try:
+        server = HTTPServer(("0.0.0.0", port), make_handler(state, results_dir))
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        return server
+    except OSError:
+        # Port sudah digunakan oleh proses dashboard background lain
+        print(f"[Orkestrator] Server dashboard web sudah aktif di port {port}.")
+        return None
 
 
 if __name__ == "__main__":
@@ -210,7 +247,7 @@ if __name__ == "__main__":
     res_dir = Path(args.results_dir).resolve()
     res_dir.mkdir(parents=True, exist_ok=True)
 
-    state = ExperimentState()
+    state = ExperimentState(state_file=res_dir / "state.json", results_dir=res_dir)
     state.load_existing_results(res_dir)
 
     print("=============================================================")

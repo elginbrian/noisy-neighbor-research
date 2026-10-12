@@ -78,7 +78,7 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # 2. Inisialisasi Web Dashboard Server
-    state = ExperimentState()
+    state = ExperimentState(state_file=output_dir / "state.json", results_dir=output_dir)
     if not args.no_dashboard:
         start_dashboard_server(state, output_dir, port=args.dashboard_port)
         print(f"[Orkestrator] Dashboard Web Aktif: http://0.0.0.0:{args.dashboard_port}")
