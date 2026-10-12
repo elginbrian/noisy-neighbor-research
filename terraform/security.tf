@@ -18,6 +18,16 @@ resource "aws_vpc_security_group_ingress_rule" "ssh" {
   to_port           = 22
 }
 
+# Dashboard Web Orkestrator (Port 8080) dari IP peneliti
+resource "aws_vpc_security_group_ingress_rule" "dashboard" {
+  security_group_id = aws_security_group.nn.id
+  description       = "Dashboard web pemantauan orkestrator dari IP peneliti"
+  cidr_ipv4         = var.allowed_ssh_cidr
+  ip_protocol       = "tcp"
+  from_port         = 8080
+  to_port           = 8080
+}
+
 # Seluruh lalu lintas internal antar instance (JMeter ke container, SCP, dll.)
 resource "aws_vpc_security_group_ingress_rule" "internal" {
   security_group_id            = aws_security_group.nn.id

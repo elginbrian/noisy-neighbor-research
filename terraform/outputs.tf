@@ -28,6 +28,11 @@ output "ssh_tester" {
   value       = "ssh -i ~/.ssh/noisy-neighbor ubuntu@${aws_instance.tester.public_ip}"
 }
 
+output "dashboard_url" {
+  description = "URL Dashboard Web Pemantauan Eksperimen & Pengunduhan Hasil"
+  value       = "http://${aws_instance.tester.public_ip}:8080"
+}
+
 # ==============================================================
 # Alias Kompatibilitas Mundur (Backward Compatibility)
 # ==============================================================

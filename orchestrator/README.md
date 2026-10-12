@@ -13,6 +13,7 @@ Kode dipecah menjadi modul-modul kecil yang modular dan terfokus:
 - **`ssh_client.py`**: Abstraksi koneksi SSH dan pengunduhan SCP ke Target Instance.
 - **`verifier.py`**: Verifikasi limit cgroups v2 (`cpu.max`, `memory.max`, dan memastikan `io.max` kosong) sebelum injeksi beban dimulai (Bab 3.4.4.D).
 - **`session_runner.py`**: Eksekusi siklus 1 sesi (Reset container $\rightarrow$ Drop cache $\rightarrow$ Run container $\rightarrow$ Probe kesiapan $\rightarrow$ Jalankan Tracker & JMeter $\rightarrow$ Tarik hasil via SCP).
+- **`dashboard.py`**: Server dashboard web ringan berbasis Python stdlib (port 8080) untuk memantau progres real-time dan mengunduh berkas arsip ZIP seluruh hasil pengujian.
 - **`runner.py`**: Entry point CLI utama yang mengorkestrasi eksekusi sesi berurutan dengan jeda idle 30 detik (Bab 3.4.4.C).
 
 ---
@@ -60,3 +61,21 @@ python3 orchestrator/runner.py --target-ip 10.0.1.X --mode single --cell 16
 ```bash
 python3 orchestrator/runner.py --target-ip 10.0.1.X --mode full
 ```
+
+---
+
+## 4. Dashboard Web & Pengunduhan Hasil (Port 8080)
+
+Saat `runner.py` berjalan, server dashboard otomatis aktif di latar belakang pada port 8080:
+- **Akses Dashboard**: Buka `http://<tester_public_ip>:8080` di browser.
+- **Fitur Dashboard**:
+  - Progres persentase (%) dan indikator sesi berjalan.
+  - Detail status tahapan eksekusi per sesi (*reset container, drop cache, run JMeter, idle*).
+  - Tabel hasil metrik sesi yang telah selesai (*P95 Latency, Uptime %, Host CPU %, OOM Kill status*).
+  - Tombol **Unduh Seluruh Hasil (.zip)** langsung dari browser (`/api/download/all`).
+- **Mode Standalone (Tanpa Menjalankan Uji Ulang)**:
+  Jika ingin membuka web server hanya untuk melihat hasil lama atau mengunduh zip:
+  ```bash
+  python3 orchestrator/dashboard.py --port 8080 --results-dir results
+  ```
+

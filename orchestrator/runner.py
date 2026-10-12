@@ -19,6 +19,7 @@ CURRENT_DIR = Path(__file__).resolve().parent
 if str(CURRENT_DIR) not in sys.path:
     sys.path.insert(0, str(CURRENT_DIR))
 
+from dashboard import ExperimentState, start_dashboard_server
 from matrix import EXPERIMENT_CELLS, generate_session_plan
 from session_runner import SessionRunner
 from ssh_client import SSHClient
@@ -36,6 +37,8 @@ def main():
     parser.add_argument("--replications", type=int, default=None, help="Jumlah replikasi per sel (opsional override)")
     parser.add_argument("--idle-sec", type=int, default=30, help="Jeda idle antar sesi dalam detik (default: 30)")
     parser.add_argument("--seed", type=int, default=42, help="Seed acak untuk pengacakan urutan sesi")
+    parser.add_argument("--dashboard-port", type=int, default=8080, help="Port web server dashboard (default: 8080)")
+    parser.add_argument("--no-dashboard", action="store_true", help="Nonaktifkan web dashboard")
     parser.add_argument("--dry-run", action="store_true", help="Cetak rencana sesi tanpa eksekusi")
 
     args = parser.parse_args()
@@ -69,7 +72,19 @@ def main():
             print(f"  {idx:02d}. {s['session_id']} -> {s['cell_name']} (CPUs: {s['cpus']}, Mem: {s['memory']})")
         return
 
-    # 2. Inisialisasi Klien SSH dan Verifikasi Koneksi
+    root_dir = CURRENT_DIR.parent
+    jmeter_dir = root_dir / "jmeter"
+    output_dir = root_dir / args.output_dir
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # 2. Inisialisasi Web Dashboard Server
+    state = ExperimentState()
+    if not args.no_dashboard:
+        start_dashboard_server(state, output_dir, port=args.dashboard_port)
+        print(f"[Orkestrator] Dashboard Web Aktif: http://0.0.0.0:{args.dashboard_port}")
+        print(f"              (Pantau progres dan unduh .zip hasil di browser Anda)\n")
+
+    # 3. Inisialisasi Klien SSH dan Verifikasi Koneksi
     ssh = SSHClient(host=args.target_ip, user=args.ssh_user, key_path=args.ssh_key)
     print("[Orkestrator] Memeriksa konektivitas SSH ke Target Instance...")
     if not ssh.check_connection():
@@ -77,18 +92,16 @@ def main():
         sys.exit(1)
     print("[Orkestrator] Koneksi SSH terverifikasi aktif.\n")
 
-    # 3. Inisialisasi Session Runner
-    root_dir = CURRENT_DIR.parent
-    jmeter_dir = root_dir / "jmeter"
-    output_dir = root_dir / args.output_dir
-
+    # 4. Inisialisasi Session Runner
     runner = SessionRunner(
         ssh=ssh,
         target_ip=args.target_ip,
         jmeter_dir=jmeter_dir,
+        state=state,
     )
 
-    # 4. Loop Eksekusi Sesi
+    # 5. Loop Eksekusi Sesi
+    state.start_experiment(args.mode.upper(), len(sessions))
     completed = 0
     failed = 0
 
@@ -97,7 +110,10 @@ def main():
         print(f"Mengeksekusi Sesi [{idx}/{len(sessions)}]: {session['session_id']} ({session['cell_name']})")
         print(f"-------------------------------------------------------------")
 
+        state.set_current_session(session, "Mempersiapkan Target Instance...")
         result = runner.execute_session(session, output_dir)
+        state.complete_session(result)
+
         if result is not None:
             completed += 1
         else:
@@ -105,13 +121,28 @@ def main():
 
         # Jeda idle antar sesi sesuai Bab 3.4.4.C (kecuali pada sesi terakhir)
         if idx < len(sessions):
-            print(f"\n[Orkestrator] Jeda idle pemulihan host selama {args.idle_sec} detik...")
+            msg = f"Jeda idle pemulihan host selama {args.idle_sec} detik..."
+            print(f"\n[Orkestrator] {msg}")
+            state.update_stage(msg)
             time.sleep(args.idle_sec)
+
+    state.finish_experiment("COMPLETED" if failed == 0 else "PARTIAL")
 
     print(f"\n=============================================================")
     print(f"[Orkestrator Selesai] Total: {len(sessions)} | Sukses: {completed} | Gagal: {failed}")
     print(f"Seluruh log dan ringkasan tersimpan di direktori: {output_dir}")
+    if not args.no_dashboard:
+        print(f"Unduh seluruh hasil via web: http://<tester_ip>:{args.dashboard_port}/api/download/all")
+        print(f"Dashboard web tetap aktif di port {args.dashboard_port}.")
+        print(f"Tekan Ctrl+C untuk menghentikan server dashboard kapan saja.")
     print(f"=============================================================")
+
+    if not args.no_dashboard:
+        try:
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            print("\n[Orkestrator] Server dashboard dihentikan. Selesai.")
 
 
 if __name__ == "__main__":

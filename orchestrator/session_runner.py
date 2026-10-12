@@ -18,11 +18,13 @@ class SessionRunner:
         target_ip: str,
         jmeter_dir: Path,
         remote_project_dir: str = "/home/ubuntu",
+        state: Optional[object] = None,
     ):
         self.ssh = ssh
         self.target_ip = target_ip
         self.jmeter_dir = jmeter_dir
         self.remote_project_dir = remote_project_dir
+        self.state = state
         self.verifier = CgroupVerifier(ssh=ssh, container_name="nn-aggressor")
 
     def prepare_target(self, session: Dict, max_retries: int = 3) -> bool:
@@ -109,6 +111,8 @@ class SessionRunner:
             return None
 
         # 2. Mulai Tracker di Target Instance (di latar belakang)
+        if self.state:
+            self.state.update_stage("Memulai Skrip Pemantau (Tracker) di Target Instance...")
         tracker_cmd = (
             f"nohup python3 {self.remote_project_dir}/monitoring/tracker.py "
             f"--session-id {sess_id} --duration 60 --interval 2 "
@@ -119,6 +123,8 @@ class SessionRunner:
         print(f"[{sess_id}] Tracker diaktifkan di Target Instance.")
 
         # 3. Jalankan JMeter di Tester Instance
+        if self.state:
+            self.state.update_stage("Menjalankan Injeksi Beban JMeter (10s baseline + 50s flood)...")
         jtl_path = output_dir / f"jmeter_{sess_id}.jtl"
         jmeter_sh = self.jmeter_dir / "run_test.sh"
         print(f"[{sess_id}] Memulai injeksi beban JMeter (durasi 60s)...")
@@ -132,6 +138,8 @@ class SessionRunner:
         time.sleep(2)
 
         # 4. Tarik berkas hasil dari Target Instance via SCP
+        if self.state:
+            self.state.update_stage("Menarik berkas log metrik via SCP...")
         remote_csv = f"{self.remote_project_dir}/results/metrics_{sess_id}.csv"
         remote_json = f"{self.remote_project_dir}/results/summary_{sess_id}.json"
         local_csv = output_dir / f"metrics_{sess_id}.csv"

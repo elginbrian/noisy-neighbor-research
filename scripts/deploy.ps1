@@ -122,6 +122,8 @@ Write-Host " [5/5] STATUS: SELURUH KOMPONEN SIAP DIJALANKAN!                " -F
 Write-Host "=================================================================" -ForegroundColor Cyan
 Write-Host "Target Instance IP : Publik = $targetPublicIp | Privat = $targetPrivateIp"
 Write-Host "Tester Instance IP : Publik = $testerPublicIp | Privat = $testerPrivateIp"
+Write-Host "Dashboard Web URL  : http://${testerPublicIp}:8080" -ForegroundColor Cyan
+Write-Host "                     (Buka di browser untuk memantau progres & unduh .zip)" -ForegroundColor DarkCyan
 Write-Host ""
 Write-Host "Pilih aksi yang ingin dijalankan sekarang:" -ForegroundColor Yellow
 Write-Host " [1] Jalankan Pilot Study (16 sel x 1 replikasi)" -ForegroundColor White
