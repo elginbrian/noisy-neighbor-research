@@ -127,53 +127,10 @@ Write-Host " [4/5] Membangun Image & Verifikasi Kesiapan Komponen           " -F
 Write-Host "=================================================================" -ForegroundColor Cyan
 
 Write-Host "Memeriksa container image nn-victim dan nn-aggressor di Target Instance..."
-$buildScript = @'
-set -e
-NEED_BUILD=0
-if ! docker image inspect nn-victim:latest >/dev/null 2>&1 || ! docker image inspect nn-aggressor:latest >/dev/null 2>&1; then
-    NEED_BUILD=1
-elif [ ! -f /tmp/.nn_docker_verified ] || [ /home/ubuntu/.hash_apps -nt /tmp/.nn_docker_verified 2>/dev/null ]; then
-    NEED_BUILD=1
-fi
+ssh -n -i $key -o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ConnectTimeout=15 ubuntu@$targetPublicIp "chmod +x /home/ubuntu/apps/setup_containers.sh && bash /home/ubuntu/apps/setup_containers.sh"
 
-if [ "$NEED_BUILD" -eq 1 ]; then
-    echo "Membangun container image nn-victim dan nn-aggressor..."
-    docker build -t nn-victim:latest /home/ubuntu/apps/victim >/dev/null
-    docker build -t nn-aggressor:latest /home/ubuntu/apps/aggressor >/dev/null
-    echo "[OK] Docker images berhasil dibangun."
-
-    # Smoke test kesiapan container
-    docker run -d --name nn-victim-probe -p 80:80 nn-victim:latest >/dev/null
-    docker run -d --name nn-aggressor-probe -p 8000:8000 nn-aggressor:latest >/dev/null
-    sleep 2
-    curl -s -f http://localhost:80/health >/dev/null && echo "[OK] Victim container merespons /health."
-    curl -s -f http://localhost:8000/health >/dev/null && echo "[OK] Aggressor container merespons /health."
-    docker rm -f nn-victim-probe nn-aggressor-probe >/dev/null
-    touch /tmp/.nn_docker_verified
-else
-    echo "[OK] Container image sudah tersedia dan terverifikasi (skip rebuild)."
-fi
-'@
-$buildScript | ssh -i $key -o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ConnectTimeout=15 ubuntu@$targetPublicIp "bash -s"
-
-Write-Host "Memverifikasi Apache JMeter dan koneksi SSH internal di Tester Instance..."
-$verifyTesterScript = @"
-set -e
-/opt/jmeter/bin/jmeter -v | head -n 2
-ssh -i ~/.ssh/noisy-neighbor -o StrictHostKeyChecking=no ubuntu@$targetPrivateIp "docker --version" >/dev/null
-echo "[OK] Tester terhubung ke Target via IP privat: $targetPrivateIp"
-
-# Memastikan direktori results dan Dashboard Web aktif di latar belakang (port 8080)
-mkdir -p /home/ubuntu/results
-if pgrep -f "orchestrator/dashboard.py" >/dev/null; then
-    echo "[OK] Dashboard Web sudah aktif di port 8080."
-else
-    nohup python3 /home/ubuntu/orchestrator/dashboard.py --port 8080 --results-dir /home/ubuntu/results >/home/ubuntu/dashboard.log 2>&1 &
-    sleep 1
-    curl -s -f http://localhost:8080/ >/dev/null && echo "[OK] Dashboard Web aktif di port 8080."
-fi
-"@
-$verifyTesterScript | ssh -i $key -o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ConnectTimeout=15 ubuntu@$testerPublicIp "bash -s"
+Write-Host "Memverifikasi Apache JMeter dan kesiapan Tester Instance..."
+ssh -n -i $key -o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ConnectTimeout=15 ubuntu@$testerPublicIp "chmod +x /home/ubuntu/orchestrator/verify_tester.sh && bash /home/ubuntu/orchestrator/verify_tester.sh $targetPrivateIp"
 
 Write-Host ""
 Write-Host "=================================================================" -ForegroundColor Cyan
