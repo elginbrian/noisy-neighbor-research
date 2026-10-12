@@ -1,4 +1,4 @@
-# Deploy infrastruktur lalu tunggu bootstrap kedua node selesai.
+# Deploy infrastruktur lalu tunggu bootstrap kedua instance selesai.
 # Jalankan dari folder scripts/:  .\deploy.ps1
 $ErrorActionPreference = "Stop"
 $tf  = Join-Path $PSScriptRoot "..\terraform"
@@ -8,8 +8,8 @@ terraform "-chdir=$tf" apply -auto-approve
 if ($LASTEXITCODE -ne 0) { throw "terraform apply gagal." }
 
 $nodes = @{
-    target   = (terraform "-chdir=$tf" output -raw target_public_ip)
-    attacker = (terraform "-chdir=$tf" output -raw attacker_public_ip)
+    target = (terraform "-chdir=$tf" output -raw target_public_ip)
+    tester = (terraform "-chdir=$tf" output -raw tester_public_ip)
 }
 
 foreach ($name in $nodes.Keys) {
@@ -50,4 +50,4 @@ foreach ($name in $nodes.Keys) {
 
 Write-Host ""
 terraform "-chdir=$tf" output ssh_target
-terraform "-chdir=$tf" output ssh_attacker
+terraform "-chdir=$tf" output ssh_tester

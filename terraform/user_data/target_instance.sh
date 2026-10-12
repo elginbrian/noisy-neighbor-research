@@ -1,5 +1,5 @@
 #!/bin/bash
-# Bootstrap Target Node (Ubuntu Server 22.04 LTS).
+# Bootstrap Target Instance (Ubuntu Server 22.04 LTS).
 # Hasil: swap nonaktif, Docker Engine 27.x (cgroup driver systemd) di atas cgroups v2,
 # sysstat (iostat) dan psutil untuk Skrip Pemantau Pengujian.
 # Penanda selesai : /var/log/bootstrap-done

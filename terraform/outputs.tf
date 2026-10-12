@@ -1,29 +1,47 @@
 output "target_public_ip" {
-  description = "IP publik Target Node (untuk SSH dari laptop)"
+  description = "IP publik Target Instance (untuk SSH dari laptop)"
   value       = aws_instance.target.public_ip
 }
 
 output "target_private_ip" {
-  description = "IP privat Target Node (sasaran JMeter dan SCP antar-node)"
+  description = "IP privat Target Instance (sasaran JMeter dan SCP antar-instance)"
   value       = aws_instance.target.private_ip
 }
 
-output "attacker_public_ip" {
-  description = "IP publik Attacker Node (untuk SSH dari laptop)"
-  value       = aws_instance.attacker.public_ip
+output "tester_public_ip" {
+  description = "IP publik Tester Instance (untuk SSH dari laptop)"
+  value       = aws_instance.tester.public_ip
 }
 
-output "attacker_private_ip" {
-  description = "IP privat Attacker Node"
-  value       = aws_instance.attacker.private_ip
+output "tester_private_ip" {
+  description = "IP privat Tester Instance"
+  value       = aws_instance.tester.private_ip
 }
 
 output "ssh_target" {
-  description = "Perintah SSH ke Target Node"
+  description = "Perintah SSH ke Target Instance"
   value       = "ssh -i ~/.ssh/noisy-neighbor ubuntu@${aws_instance.target.public_ip}"
 }
 
+output "ssh_tester" {
+  description = "Perintah SSH ke Tester Instance"
+  value       = "ssh -i ~/.ssh/noisy-neighbor ubuntu@${aws_instance.tester.public_ip}"
+}
+
+# ==============================================================
+# Alias Kompatibilitas Mundur (Backward Compatibility)
+# ==============================================================
+output "attacker_public_ip" {
+  description = "Alias untuk tester_public_ip"
+  value       = aws_instance.tester.public_ip
+}
+
+output "attacker_private_ip" {
+  description = "Alias untuk tester_private_ip"
+  value       = aws_instance.tester.private_ip
+}
+
 output "ssh_attacker" {
-  description = "Perintah SSH ke Attacker Node"
-  value       = "ssh -i ~/.ssh/noisy-neighbor ubuntu@${aws_instance.attacker.public_ip}"
+  description = "Alias untuk ssh_tester"
+  value       = "ssh -i ~/.ssh/noisy-neighbor ubuntu@${aws_instance.tester.public_ip}"
 }

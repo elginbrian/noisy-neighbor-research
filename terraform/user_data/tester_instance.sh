@@ -1,5 +1,5 @@
 #!/bin/bash
-# Bootstrap Attacker Node (Ubuntu Server 22.04 LTS).
+# Bootstrap Tester Instance (Ubuntu Server 22.04 LTS).
 # Hasil: JRE, Apache JMeter (versi dikunci), dan Python untuk Skrip Otomasi Pengujian.
 # Penanda selesai : /var/log/bootstrap-done
 # Penanda gagal   : /var/log/bootstrap-failed
@@ -15,13 +15,14 @@ JMETER_VERSION="5.6.3"
 # 1. Hentikan pembaruan otomatis latar belakang agar tidak mengganggu pembangkit beban
 systemctl disable --now unattended-upgrades apt-daily.timer apt-daily-upgrade.timer || true
 
-# 2. Paket dasar: JRE (prasyarat JMeter), Python, dan utilitas
+# 2. Paket dasar: JRE, Python, dan utilitas
 apt-get update
 apt-get install -y openjdk-17-jre-headless python3-pip unzip curl tmux
 
-# 3. Apache JMeter (versi dikunci demi reprodusibilitas, Bab 3.2.3)
+# 3. Apache JMeter
 cd /opt
-curl -fsSLO "https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-${JMETER_VERSION}.tgz"
+curl -fsSLO "https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-${JMETER_VERSION}.tgz" || \
+curl -fsSLO "https://downloads.apache.org/jmeter/binaries/apache-jmeter-${JMETER_VERSION}.tgz"
 tar -xzf "apache-jmeter-${JMETER_VERSION}.tgz"
 rm "apache-jmeter-${JMETER_VERSION}.tgz"
 ln -sfn "/opt/apache-jmeter-${JMETER_VERSION}" /opt/jmeter

@@ -4,7 +4,7 @@ resource "aws_instance" "target" {
   subnet_id              = aws_subnet.public.id
   vpc_security_group_ids = [aws_security_group.nn.id]
   key_name               = aws_key_pair.main.key_name
-  user_data              = file("${path.module}/user_data/target_node.sh")
+  user_data              = file("${path.module}/user_data/target_instance.sh")
 
   credit_specification {
     cpu_credits = "unlimited"
@@ -19,18 +19,18 @@ resource "aws_instance" "target" {
   }
 
   tags = {
-    Name = "nn-target-node"
+    Name = "nn-target-instance"
     Role = "target"
   }
 }
 
-resource "aws_instance" "attacker" {
+resource "aws_instance" "tester" {
   ami                    = data.aws_ami.ubuntu_2204.id
-  instance_type          = var.attacker_instance_type
+  instance_type          = var.tester_instance_type
   subnet_id              = aws_subnet.public.id
   vpc_security_group_ids = [aws_security_group.nn.id]
   key_name               = aws_key_pair.main.key_name
-  user_data              = file("${path.module}/user_data/attacker_node.sh")
+  user_data              = file("${path.module}/user_data/tester_instance.sh")
 
   credit_specification {
     cpu_credits = "unlimited"
@@ -45,7 +45,7 @@ resource "aws_instance" "attacker" {
   }
 
   tags = {
-    Name = "nn-attacker-node"
-    Role = "attacker"
+    Name = "nn-tester-instance"
+    Role = "tester"
   }
 }

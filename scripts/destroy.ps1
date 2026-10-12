@@ -1,10 +1,10 @@
-# Tarik hasil eksperimen dari Attacker Node, baru hancurkan infrastruktur.
+# Tarik hasil eksperimen dari Tester Instance, baru hancurkan infrastruktur.
 # - Ada hasil di ~/results      : hasil ditarik; destroy dibatalkan bila penarikan gagal.
 # - Tidak ada hasil (kosong)    : beri peringatan, lanjut ke konfirmasi destroy.
-# - Attacker tidak bisa dihubungi: destroy dibatalkan, kecuali memakai -Force.
+# - Tester tidak bisa dihubungi : destroy dibatalkan, kecuali memakai -Force.
 # Jalankan dari folder scripts/:  .\destroy.ps1  [-Force]
 param(
-    [switch]$Force   # lewati penarikan hasil bila Attacker Node tidak dapat dihubungi
+    [switch]$Force   # lewati penarikan hasil bila Tester Instance tidak dapat dihubungi
 )
 
 $ErrorActionPreference = "Stop"
@@ -12,10 +12,13 @@ $tf      = Join-Path $PSScriptRoot "..\terraform"
 $results = Join-Path $PSScriptRoot "..\results"
 $key     = "$HOME\.ssh\noisy-neighbor"
 
-$ip = terraform "-chdir=$tf" output -raw attacker_public_ip 2>$null
-$haveAttacker = ($LASTEXITCODE -eq 0 -and $ip)
+$ip = terraform "-chdir=$tf" output -raw tester_public_ip 2>$null
+if (-not $ip) {
+    $ip = terraform "-chdir=$tf" output -raw attacker_public_ip 2>$null
+}
+$haveTester = ($LASTEXITCODE -eq 0 -and $ip)
 
-if ($haveAttacker) {
+if ($haveTester) {
     # Cek jumlah berkas di ~/results; keluaran berupa angka, atau gagal bila SSH tidak tersambung
     $ErrorActionPreference = "Continue"
     $remoteCount = ssh -i $key -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 ubuntu@$ip `
@@ -25,17 +28,17 @@ if ($haveAttacker) {
 
     if ($sshExit -ne 0) {
         if (-not $Force) {
-            Write-Error "Attacker Node ($ip) tidak dapat dihubungi. Destroy DIBATALKAN. Gunakan -Force untuk tetap melanjutkan tanpa menarik hasil."
+            Write-Error "Tester Instance ($ip) tidak dapat dihubungi. Destroy DIBATALKAN. Gunakan -Force untuk tetap melanjutkan tanpa menarik hasil."
             exit 1
         }
-        Write-Host "PERINGATAN: Attacker Node tidak dapat dihubungi; hasil tidak ditarik (-Force)." -ForegroundColor Yellow
+        Write-Host "PERINGATAN: Tester Instance tidak dapat dihubungi; hasil tidak ditarik (-Force)." -ForegroundColor Yellow
     }
     elseif ([int]$remoteCount -gt 0) {
         $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
         $dest  = Join-Path $results $stamp
         New-Item -ItemType Directory -Force -Path $dest | Out-Null
 
-        Write-Host "Menarik $remoteCount berkas dari Attacker Node ($ip) ke $dest ..."
+        Write-Host "Menarik $remoteCount berkas dari Tester Instance ($ip) ke $dest ..."
         scp -i $key -o StrictHostKeyChecking=accept-new -r "ubuntu@${ip}:~/results/*" $dest
         if ($LASTEXITCODE -ne 0) {
             Write-Error "Gagal menarik hasil. Destroy DIBATALKAN agar data tidak hilang."
@@ -50,11 +53,11 @@ if ($haveAttacker) {
         Write-Host "$count berkas berhasil ditarik." -ForegroundColor Green
     }
     else {
-        Write-Host "Tidak ada hasil di ~/results pada Attacker Node; tidak ada yang perlu ditarik." -ForegroundColor Yellow
+        Write-Host "Tidak ada hasil di ~/results pada Tester Instance; tidak ada yang perlu ditarik." -ForegroundColor Yellow
     }
 }
 else {
-    Write-Host "IP Attacker Node tidak ditemukan di state Terraform; melewati penarikan hasil." -ForegroundColor Yellow
+    Write-Host "IP Tester Instance tidak ditemukan di state Terraform; melewati penarikan hasil." -ForegroundColor Yellow
 }
 
 $confirm = Read-Host "Ketik 'destroy' untuk menghancurkan SELURUH infrastruktur"

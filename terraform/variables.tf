@@ -33,13 +33,19 @@ variable "public_key_path" {
 }
 
 variable "target_instance_type" {
-  description = "Tipe instance Target Node (Tabel 3.2.1)"
+  description = "Tipe instance Target Instance"
   type        = string
   default     = "t3.small"
 }
 
+variable "tester_instance_type" {
+  description = "Tipe instance Tester Instance"
+  type        = string
+  default     = "t3.medium"
+}
+
 variable "attacker_instance_type" {
-  description = "Tipe instance Attacker Node (Tabel 3.2.1)"
+  description = "Alias kompatibilitas untuk tester_instance_type (Tester Instance)"
   type        = string
   default     = "t3.medium"
 }

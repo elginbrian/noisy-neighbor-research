@@ -18,10 +18,10 @@ resource "aws_vpc_security_group_ingress_rule" "ssh" {
   to_port           = 22
 }
 
-# Seluruh lalu lintas internal antar node (JMeter ke container, SCP, dll.)
+# Seluruh lalu lintas internal antar instance (JMeter ke container, SCP, dll.)
 resource "aws_vpc_security_group_ingress_rule" "internal" {
   security_group_id            = aws_security_group.nn.id
-  description                  = "Lalu lintas internal antar node"
+  description                  = "Lalu lintas internal antar instance"
   referenced_security_group_id = aws_security_group.nn.id
   ip_protocol                  = "-1"
 }

@@ -22,12 +22,12 @@ noisy-neighbor-research/
 │   ├── network.tf                  # VPC, subnets, IGW, route table
 │   ├── security.tf                 # Security Groups
 │   ├── keypair.tf                  # key pair from local public key
-│   ├── compute.tf                  # Target Node and Attacker Node EC2 instances
+│   ├── compute.tf                  # Target Instance and Tester Instance EC2 instances
 │   ├── budget.tf                   # AWS Budget alarm
 │   ├── outputs.tf                  # IP and SSH commands
 │   └── user_data/
-│       ├── target_node.sh          # Docker 27.x, cgroups v2, swap off, sysstat, psutil
-│       └── attacker_node.sh        # JRE, JMeter 5.6.3, Python
+│       ├── target_instance.sh      # Docker 27.x, cgroups v2, swap off, sysstat, psutil
+│       └── tester_instance.sh      # JRE, JMeter 5.6.3, Python
 ├── scripts/
 │   ├── deploy.ps1                  # terraform apply + wait for bootstrap
 │   └── destroy.ps1                 # pull results then terraform destroy
@@ -93,7 +93,7 @@ The script runs `terraform apply`, then waits for the `/var/log/bootstrap-done` 
 
 ### 5. Run the experiment
 
-This stage waits for the applications and automation scripts to be created. The planned flow is: a pilot study, followed by 80 randomized sessions in a single `terraform apply` run using `tmux` on the Attacker Node.
+This stage waits for the applications and automation scripts to be created. The planned flow is: a pilot study, followed by 80 randomized sessions in a single `terraform apply` run using `tmux` on the Tester Instance.
 
 ### 6. Pull results and destroy infrastructure
 
@@ -101,6 +101,6 @@ This stage waits for the applications and automation scripts to be created. The 
 .\destroy.ps1
 ```
 
-The script pulls `~/results` from the Attacker Node to `results/<timestamp>/`, then asks you to type `destroy`. If the pull fails or the results folder is empty, the `destroy` is aborted so data is not lost. Afterwards, check the AWS Console (EC2, EBS, Elastic IP) to ensure no leftover resources remain.
+The script pulls `~/results` from the Tester Instance to `results/<timestamp>/`, then asks you to type `destroy`. If the pull fails or the results folder is empty, the `destroy` is aborted so data is not lost. Afterwards, check the AWS Console (EC2, EBS, Elastic IP) to ensure no leftover resources remain.
 
 ---
