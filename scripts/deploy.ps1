@@ -40,7 +40,7 @@ foreach ($name in $nodes.Keys) {
                   "if [ -f /var/log/bootstrap-failed ]; then echo __NN_FAILED__; " +
                   "elif [ -f /var/log/bootstrap-done ]; then echo __NN_DONE__; fi"
         $ErrorActionPreference = "Continue"
-        $lines = @(ssh -i $key -o StrictHostKeyChecking=accept-new -o ConnectTimeout=5 ubuntu@$ip $remote 2>$null)
+        $lines = @(ssh -n -i $key -o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ConnectTimeout=5 ubuntu@$ip $remote 2>$null)
         $sshExit = $LASTEXITCODE
         $ErrorActionPreference = "Stop"
 
@@ -60,6 +60,20 @@ foreach ($name in $nodes.Keys) {
 
         if ($status -eq "DONE")   { $ok = $true; break }
         if ($status -eq "FAILED") { throw "Bootstrap $name gagal. Cek /var/log/bootstrap.log di $ip." }
+
+        # Self-healing: periksa jika tidak ada log baru dan proses mati sebelum tuntas
+        if ($lines.Count -eq 0 -and $i -ge 4) {
+            $ErrorActionPreference = "Continue"
+            $chk = @(ssh -n -i $key -o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ConnectTimeout=5 ubuntu@$ip "test -f /var/log/bootstrap-done && echo DONE || (pgrep -f 'bootstrap|user-data|cloud-init|curl|apt' >/dev/null && echo RUNNING || echo DEAD)")
+            $ErrorActionPreference = "Stop"
+            $state = ($chk -join "").Trim()
+            if ($state -eq "DONE") { $ok = $true; break }
+            if ($state -eq "DEAD") {
+                Write-Host "  -> [$name] Terdeteksi proses bootstrap terhenti prematur, melanjutkan otomatis via SSH..." -ForegroundColor DarkYellow
+                ssh -n -i $key -o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ConnectTimeout=10 ubuntu@$ip "sudo bash -c 'if [ -f /var/lib/cloud/instance/scripts/part-001 ]; then bash /var/lib/cloud/instance/scripts/part-001; fi' >/dev/null 2>&1 &"
+            }
+        }
+
         Start-Sleep -Seconds 10
     }
     if (-not $ok) { throw "Bootstrap $name tidak selesai dalam batas waktu." }
@@ -142,11 +156,11 @@ Write-Host "Dashboard Web URL  : http://${testerPublicIp}:8080" -ForegroundColor
 Write-Host "                     (Buka di browser untuk memantau progres & unduh .zip)" -ForegroundColor DarkCyan
 Write-Host ""
 Write-Host "Pilih aksi yang ingin dijalankan sekarang:" -ForegroundColor Yellow
-Write-Host " [1] Jalankan Pilot Study (16 sel x 1 replikasi)" -ForegroundColor White
-Write-Host " [2] Jalankan Single Cell Test (Sel 1 Kontrol - Tanpa Limit)" -ForegroundColor White
-Write-Host " [3] Jalankan Single Cell Test (Sel 16 - Limit Paling Ketat)" -ForegroundColor White
-Write-Host " [4] Jalankan Full Experiment (80 sesi acak)" -ForegroundColor White
-Write-Host " [0] Selesai / Keluar (Infrastruktur tetap aktif, uji coba manual nanti)" -ForegroundColor Gray
+Write-Host " [1] Pilot Study Test (16 sel x 1 replikasi)" -ForegroundColor White
+Write-Host " [2] Single Cell Test (Sel 1)" -ForegroundColor White
+Write-Host " [3] Single Cell Test (Sel 16)" -ForegroundColor White
+Write-Host " [4] Full Experiment (16 sel x 5 replikasi)" -ForegroundColor White
+Write-Host " [0] Selesai" -ForegroundColor Gray
 Write-Host ""
 
 $pilihan = Read-Host "Masukkan nomor pilihan [0-4]"

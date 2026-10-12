@@ -31,6 +31,8 @@ class ExperimentState:
         self.failed_count = 0
         self.current_session: Optional[Dict] = None
         self.current_stage = "Menunggu inisiasi..."
+        self.stage_started_at: Optional[float] = None
+        self.stage_duration_sec: Optional[int] = None
         self.started_at: Optional[float] = None
         self.finished_at: Optional[float] = None
         self.history: List[Dict] = []
@@ -56,17 +58,23 @@ class ExperimentState:
             self.failed_count = 0
             self.started_at = time.time()
             self.finished_at = None
+            self.stage_started_at = time.time()
+            self.stage_duration_sec = None
         self._sync_file()
 
-    def set_current_session(self, session: Dict, stage: str):
+    def set_current_session(self, session: Dict, stage: str, duration_sec: Optional[int] = None):
         with self.lock:
             self.current_session = session
             self.current_stage = stage
+            self.stage_started_at = time.time()
+            self.stage_duration_sec = duration_sec
         self._sync_file()
 
-    def update_stage(self, stage: str):
+    def update_stage(self, stage: str, duration_sec: Optional[int] = None):
         with self.lock:
             self.current_stage = stage
+            self.stage_started_at = time.time()
+            self.stage_duration_sec = duration_sec
         self._sync_file()
 
     def complete_session(self, result: Optional[Dict]):
@@ -77,6 +85,8 @@ class ExperimentState:
             else:
                 self.failed_count += 1
             self.current_stage = "Sesi selesai."
+            self.stage_started_at = time.time()
+            self.stage_duration_sec = None
         self._sync_file()
 
     def finish_experiment(self, status: str = "COMPLETED"):
@@ -84,6 +94,8 @@ class ExperimentState:
             self.status = status
             self.finished_at = time.time()
             self.current_stage = "Seluruh pengujian telah selesai."
+            self.stage_started_at = time.time()
+            self.stage_duration_sec = None
         self._sync_file()
 
     def load_existing_results(self, results_dir: Path):
@@ -108,10 +120,15 @@ class ExperimentState:
         self._sync_file()
 
     def _build_dict(self) -> Dict:
-        elapsed = 0
+        now = time.time()
+        elapsed = 0.0
         if self.started_at:
-            end = self.finished_at or time.time()
+            end = self.finished_at or now
             elapsed = round(end - self.started_at, 1)
+
+        stage_elapsed = 0.0
+        if self.stage_started_at and self.status == "RUNNING":
+            stage_elapsed = round(now - self.stage_started_at, 1)
 
         pct = 0.0
         if self.total_sessions > 0:
@@ -125,22 +142,49 @@ class ExperimentState:
             "failed_count": self.failed_count,
             "progress_pct": pct,
             "elapsed_sec": elapsed,
+            "started_at": self.started_at,
+            "finished_at": self.finished_at,
             "current_stage": self.current_stage,
+            "stage_started_at": self.stage_started_at,
+            "stage_duration_sec": self.stage_duration_sec,
+            "stage_elapsed_sec": stage_elapsed,
             "current_session": self.current_session,
             "history": self.history,
+            "current_timestamp": now,
         }
 
     def to_dict(self) -> Dict:
         # Jika state_file tersedia dan ditulis oleh runner lain, baca dari file
+        data = None
         if self.state_file and self.state_file.exists():
             try:
                 with open(self.state_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                return data
             except Exception:
-                pass
-        with self.lock:
-            return self._build_dict()
+                data = None
+
+        if not data:
+            with self.lock:
+                return self._build_dict()
+
+        # Hitung waktu elapsed secara real-time dan dinamis pada setiap request
+        now = time.time()
+        data["current_timestamp"] = now
+        started_at = data.get("started_at")
+        status = data.get("status", "IDLE")
+
+        if started_at and status == "RUNNING":
+            data["elapsed_sec"] = round(now - started_at, 1)
+        elif (status in ("COMPLETED", "FAILED")) and started_at and data.get("finished_at"):
+            data["elapsed_sec"] = round(data["finished_at"] - started_at, 1)
+
+        stage_started_at = data.get("stage_started_at")
+        if stage_started_at and status == "RUNNING":
+            data["stage_elapsed_sec"] = round(now - stage_started_at, 1)
+        else:
+            data["stage_elapsed_sec"] = 0.0
+
+        return data
 
 
 TEMPLATE_PATH = Path(__file__).resolve().parent / "templates" / "index.html"
@@ -160,7 +204,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
         super().__init__(*args, **kwargs)
 
     def do_GET(self):
-        if self.path == "/" or self.path == "/index.html":
+        clean_path = self.path.split("?")[0]
+        if clean_path in ("/", "/index.html"):
             html_bytes = get_html_content()
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -168,7 +213,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(html_bytes)
 
-        elif self.path == "/api/progress":
+        elif clean_path == "/api/progress":
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Access-Control-Allow-Origin", "*")
@@ -176,13 +221,29 @@ class DashboardHandler(BaseHTTPRequestHandler):
             data = json.dumps(self.state.to_dict())
             self.wfile.write(data.encode("utf-8"))
 
-        elif self.path == "/api/download/all":
+        elif clean_path == "/api/download/all":
             self._handle_download_zip()
 
         else:
             self.send_response(404)
             self.end_headers()
             self.wfile.write(b"Not Found")
+
+    def do_HEAD(self):
+        clean_path = self.path.split("?")[0]
+        if clean_path in ("/", "/index.html"):
+            html_bytes = get_html_content()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(html_bytes)))
+            self.end_headers()
+        elif clean_path == "/api/progress":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+        else:
+            self.send_response(404)
+            self.end_headers()
 
     def _handle_download_zip(self):
         """Mengemas seluruh berkas di folder results ke dalam berkas ZIP."""

@@ -124,7 +124,7 @@ class SessionRunner:
 
         # 3. Jalankan JMeter di Tester Instance
         if self.state:
-            self.state.update_stage("Menjalankan Injeksi Beban JMeter (10s baseline + 50s flood)...")
+            self.state.update_stage("Menjalankan Injeksi Beban JMeter (10s baseline + 50s flood)...", duration_sec=60)
         jtl_path = output_dir / f"jmeter_{sess_id}.jtl"
         jmeter_sh = self.jmeter_dir / "run_test.sh"
         print(f"[{sess_id}] Memulai injeksi beban JMeter (durasi 60s)...")

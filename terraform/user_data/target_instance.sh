@@ -10,22 +10,33 @@ exec > >(tee -a /var/log/bootstrap.log) 2>&1
 trap 'touch /var/log/bootstrap-failed' ERR
 
 export DEBIAN_FRONTEND=noninteractive
+export NEEDRESTART_MODE=a
+export NEEDRESTART_SUSPEND=1
 
 # 1. Nonaktifkan swap permanen agar perilaku OOM Killer deterministik (Bab 3.4.4.E)
 swapoff -a
 sed -i '/\sswap\s/d' /etc/fstab
 
 # 2. Hentikan pembaruan otomatis latar belakang agar tidak menambah beban CPU/disk
-#    selama eksperimen (menjaga kondisi testbed terkendali)
+#    selama eksperimen dan tidak mengunci apt/dpkg
+systemctl stop unattended-upgrades apt-daily.service apt-daily-upgrade.service 2>/dev/null || true
+systemctl kill --kill-who=all unattended-upgrades 2>/dev/null || true
 systemctl disable --now unattended-upgrades apt-daily.timer apt-daily-upgrade.timer || true
+
+# Tunggu pelepasan lock apt jika sempat dipegang oleh proses boot awal
+while fuser /var/lib/dpkg/lock >/dev/null 2>&1 || fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || fuser /var/lib/apt/lists/lock >/dev/null 2>&1; do
+  echo "Menunggu pelepasan lock apt oleh proses boot awal..."
+  sleep 2
+done
 
 # 3. Paket dasar: sysstat (iostat) dan psutil untuk Skrip Pemantau Pengujian
 apt-get update
-apt-get install -y ca-certificates curl gnupg sysstat python3-pip python3-psutil
+apt-get install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" \
+  ca-certificates curl gnupg sysstat python3-pip python3-psutil
 
 # 4. Repositori resmi Docker
 install -m 0755 -d /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+curl -fsSL --connect-timeout 10 --max-time 30 --retry 3 https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
 chmod a+r /etc/apt/keyrings/docker.asc
 echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
   > /etc/apt/sources.list.d/docker.list
@@ -34,7 +45,7 @@ apt-get update
 # 5. Docker Engine seri 27.x (versi dikunci demi reprodusibilitas, Bab 3.2.3)
 DOCKER_VERSION=$(apt-cache madison docker-ce | awk '{print $3}' | grep '^5:27\.' | head -n 1)
 test -n "$DOCKER_VERSION"
-apt-get install -y \
+apt-get install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" \
   docker-ce="$DOCKER_VERSION" \
   docker-ce-cli="$DOCKER_VERSION" \
   containerd.io \

@@ -123,7 +123,7 @@ def main():
         if idx < len(sessions):
             msg = f"Jeda idle pemulihan host selama {args.idle_sec} detik..."
             print(f"\n[Orkestrator] {msg}")
-            state.update_stage(msg)
+            state.update_stage(msg, duration_sec=args.idle_sec)
             time.sleep(args.idle_sec)
 
     state.finish_experiment("COMPLETED" if failed == 0 else "PARTIAL")
