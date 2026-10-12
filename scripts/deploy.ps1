@@ -116,7 +116,7 @@ if ($keyCheck -eq "YES") {
 } else {
     Write-Host "  -> [SSH Key] Menyalin SSH key ke Tester Instance..." -ForegroundColor DarkYellow
     scp -i $key -o StrictHostKeyChecking=accept-new -o BatchMode=yes $key "ubuntu@${testerPublicIp}:/home/ubuntu/.ssh/noisy-neighbor"
-    ssh -n -i $key -o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ConnectTimeout=10 ubuntu@$testerPublicIp "chmod 600 ~/.ssh/noisy-neighbor && chmod +x /home/ubuntu/jmeter/run_test.sh"
+    ssh -n -i $key -o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ConnectTimeout=10 ubuntu@$testerPublicIp "chmod 600 ~/.ssh/noisy-neighbor && sed -i 's/\r$//' /home/ubuntu/jmeter/run_test.sh 2>/dev/null; chmod +x /home/ubuntu/jmeter/run_test.sh"
 }
 
 Write-Host "  -> Seluruh berkas siap dan terverifikasi." -ForegroundColor Green
@@ -127,10 +127,10 @@ Write-Host " [4/5] Membangun Image & Verifikasi Kesiapan Komponen           " -F
 Write-Host "=================================================================" -ForegroundColor Cyan
 
 Write-Host "Memeriksa container image nn-victim dan nn-aggressor di Target Instance..."
-ssh -n -i $key -o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ConnectTimeout=15 ubuntu@$targetPublicIp "chmod +x /home/ubuntu/apps/setup_containers.sh && bash /home/ubuntu/apps/setup_containers.sh"
+ssh -n -i $key -o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ConnectTimeout=15 ubuntu@$targetPublicIp "sed -i 's/\r$//' /home/ubuntu/apps/setup_containers.sh 2>/dev/null; chmod +x /home/ubuntu/apps/setup_containers.sh && bash /home/ubuntu/apps/setup_containers.sh"
 
 Write-Host "Memverifikasi Apache JMeter dan kesiapan Tester Instance..."
-ssh -n -i $key -o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ConnectTimeout=15 ubuntu@$testerPublicIp "chmod +x /home/ubuntu/orchestrator/verify_tester.sh && bash /home/ubuntu/orchestrator/verify_tester.sh $targetPrivateIp"
+ssh -n -i $key -o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ConnectTimeout=15 ubuntu@$testerPublicIp "sed -i 's/\r$//' /home/ubuntu/orchestrator/verify_tester.sh 2>/dev/null; chmod +x /home/ubuntu/orchestrator/verify_tester.sh && bash /home/ubuntu/orchestrator/verify_tester.sh $targetPrivateIp"
 
 Write-Host ""
 Write-Host "=================================================================" -ForegroundColor Cyan

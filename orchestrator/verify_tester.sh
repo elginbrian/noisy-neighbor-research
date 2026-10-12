@@ -21,10 +21,11 @@ fi
 
 # 3. Pastikan direktori results dan Dashboard Web aktif di port 8080
 mkdir -p /home/ubuntu/results
-if pgrep -f "orchestrator/dashboard.py" >/dev/null; then
+if curl -s -f http://localhost:8080/ >/dev/null 2>&1 || ss -tulpn 2>/dev/null | grep -q ":8080 "; then
     echo "[OK] Dashboard Web sudah aktif di port 8080."
 else
-    nohup python3 /home/ubuntu/orchestrator/dashboard.py --port 8080 --results-dir /home/ubuntu/results >/home/ubuntu/dashboard.log 2>&1 &
+    nohup python3 /home/ubuntu/orchestrator/dashboard.py --port 8080 --results-dir /home/ubuntu/results </dev/null >/home/ubuntu/dashboard.log 2>&1 &
+    disown 2>/dev/null || true
     sleep 1
     if curl -s -f http://localhost:8080/ >/dev/null 2>&1; then
         echo "[OK] Dashboard Web berhasil dijalankan di port 8080."
