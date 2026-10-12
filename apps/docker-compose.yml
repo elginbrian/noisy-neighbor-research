@@ -1,0 +1,22 @@
+services:
+  victim:
+    build:
+      context: ./victim
+    image: nn-victim:latest
+    container_name: nn-victim
+    restart: "no"
+    ports:
+      - "80:80"
+
+  aggressor:
+    build:
+      context: ./aggressor
+    image: nn-aggressor:latest
+    container_name: nn-aggressor
+    restart: "no"
+    ports:
+      - "8000:8000"
+    environment:
+      - CPU_ITERATIONS=100
+      - MEM_MB_PER_REQ=4
+      - MEM_TARGET_MB=640
