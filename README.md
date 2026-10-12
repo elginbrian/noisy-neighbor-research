@@ -32,6 +32,7 @@ noisy-neighbor-research/
 │   ├── deploy.ps1                  # terraform apply + wait for bootstrap
 │   └── destroy.ps1                 # pull results then terraform destroy
 ├── apps/                           # aggressor, victim
+├── monitoring/                     # tracker script (Target Instance)
 ├── jmeter/                         # .jmx test plans
 └── results/                        # experiment results (Git ignored)
 ```
