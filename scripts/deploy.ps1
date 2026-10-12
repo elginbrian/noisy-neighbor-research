@@ -72,7 +72,8 @@ Write-Host " [3/5] Sinkronisasi Berkas Eksperimen ke Instance                " -
 Write-Host "=================================================================" -ForegroundColor Cyan
 
 function Sync-DirectoryCached($localDir, $remoteIp, $remoteName) {
-    $files = Get-ChildItem -Recurse -File $localDir | Sort-Object FullName
+    # Abaikan __pycache__ agar tidak menghabiskan waktu upload file binary lokal Windows
+    $files = Get-ChildItem -Recurse -File $localDir | Where-Object { $_.FullName -notmatch '__pycache__' } | Sort-Object FullName
     $sb = [System.Text.StringBuilder]::new()
     foreach ($f in $files) {
         [void]$sb.Append("$($f.Name):$($f.Length):$($f.LastWriteTimeUtc.Ticks);")
@@ -81,7 +82,7 @@ function Sync-DirectoryCached($localDir, $remoteIp, $remoteName) {
     $localHash = [System.BitConverter]::ToString($md5.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($sb.ToString()))).Replace("-","").ToLower()
 
     $ErrorActionPreference = "Continue"
-    $rawHash = @(ssh -i $key -o StrictHostKeyChecking=accept-new -o ConnectTimeout=5 ubuntu@$remoteIp "cat /home/ubuntu/.hash_$remoteName 2>/dev/null")
+    $rawHash = @(ssh -n -i $key -o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ConnectTimeout=10 ubuntu@$remoteIp "cat /home/ubuntu/.hash_$remoteName 2>/dev/null")
     $remoteHash = ($rawHash -join "").Trim()
     $ErrorActionPreference = "Stop"
 
@@ -90,8 +91,8 @@ function Sync-DirectoryCached($localDir, $remoteIp, $remoteName) {
         return $false
     } else {
         Write-Host "  -> [$remoteName] Mengunggah pembaruan berkas..." -ForegroundColor DarkYellow
-        scp -r -i $key -o StrictHostKeyChecking=accept-new $localDir "ubuntu@${remoteIp}:/home/ubuntu/"
-        ssh -i $key ubuntu@$remoteIp "echo $localHash > /home/ubuntu/.hash_$remoteName"
+        scp -r -i $key -o StrictHostKeyChecking=accept-new -o BatchMode=yes $localDir "ubuntu@${remoteIp}:/home/ubuntu/"
+        ssh -n -i $key -o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ConnectTimeout=10 ubuntu@$remoteIp "echo $localHash > /home/ubuntu/.hash_$remoteName"
         return $true
     }
 }
@@ -106,7 +107,7 @@ Sync-DirectoryCached "$repoRoot\orchestrator" $testerPublicIp "orchestrator"
 
 # Periksa SSH key di Tester Instance
 $ErrorActionPreference = "Continue"
-$rawKey = @(ssh -i $key -o StrictHostKeyChecking=accept-new ubuntu@$testerPublicIp "test -s /home/ubuntu/.ssh/noisy-neighbor && echo YES || echo NO")
+$rawKey = @(ssh -n -i $key -o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ConnectTimeout=10 ubuntu@$testerPublicIp "test -s /home/ubuntu/.ssh/noisy-neighbor && echo YES || echo NO")
 $keyCheck = ($rawKey -join "").Trim()
 $ErrorActionPreference = "Stop"
 
@@ -114,8 +115,8 @@ if ($keyCheck -eq "YES") {
     Write-Host "  -> [SSH Key] Sudah ada di Tester Instance, melewati salinan." -ForegroundColor DarkGray
 } else {
     Write-Host "  -> [SSH Key] Menyalin SSH key ke Tester Instance..." -ForegroundColor DarkYellow
-    scp -i $key -o StrictHostKeyChecking=accept-new $key "ubuntu@${testerPublicIp}:/home/ubuntu/.ssh/noisy-neighbor"
-    ssh -i $key ubuntu@$testerPublicIp "chmod 600 ~/.ssh/noisy-neighbor && chmod +x /home/ubuntu/jmeter/run_test.sh"
+    scp -i $key -o StrictHostKeyChecking=accept-new -o BatchMode=yes $key "ubuntu@${testerPublicIp}:/home/ubuntu/.ssh/noisy-neighbor"
+    ssh -n -i $key -o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ConnectTimeout=10 ubuntu@$testerPublicIp "chmod 600 ~/.ssh/noisy-neighbor && chmod +x /home/ubuntu/jmeter/run_test.sh"
 }
 
 Write-Host "  -> Seluruh berkas siap dan terverifikasi." -ForegroundColor Green
@@ -153,7 +154,7 @@ else
     echo "[OK] Container image sudah tersedia dan terverifikasi (skip rebuild)."
 fi
 '@
-$buildScript | ssh -i $key ubuntu@$targetPublicIp "bash -s"
+$buildScript | ssh -i $key -o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ConnectTimeout=15 ubuntu@$targetPublicIp "bash -s"
 
 Write-Host "Memverifikasi Apache JMeter dan koneksi SSH internal di Tester Instance..."
 $verifyTesterScript = @"
@@ -172,7 +173,7 @@ else
     curl -s -f http://localhost:8080/ >/dev/null && echo "[OK] Dashboard Web aktif di port 8080."
 fi
 "@
-$verifyTesterScript | ssh -i $key ubuntu@$testerPublicIp "bash -s"
+$verifyTesterScript | ssh -i $key -o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ConnectTimeout=15 ubuntu@$testerPublicIp "bash -s"
 
 Write-Host ""
 Write-Host "=================================================================" -ForegroundColor Cyan
