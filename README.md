@@ -34,6 +34,7 @@ noisy-neighbor-research/
 ├── apps/                           # aggressor, victim
 ├── monitoring/                     # tracker script (Target Instance)
 ├── jmeter/                         # .jmx test plans
+├── orchestrator/                   # test automation orchestrator (Tester Instance)
 └── results/                        # experiment results (Git ignored)
 ```
 
