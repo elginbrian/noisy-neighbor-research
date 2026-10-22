@@ -8,6 +8,16 @@ output "target_private_ip" {
   value       = aws_instance.target.private_ip
 }
 
+output "target_instance_id" {
+  description = "ID EC2 Target Instance (untuk pemulihan otomatis)"
+  value       = aws_instance.target.id
+}
+
+output "aws_region" {
+  description = "Region AWS infrastruktur"
+  value       = var.region
+}
+
 output "tester_public_ip" {
   description = "IP publik Tester Instance (untuk SSH dari laptop)"
   value       = aws_instance.tester.public_ip

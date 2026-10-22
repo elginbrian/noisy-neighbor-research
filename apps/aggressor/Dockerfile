@@ -15,5 +15,5 @@ COPY app.py .
 
 EXPOSE 8000
 
-# Menjalankan 1 worker tanpa access-log agar tidak menimbulkan disk I/O buatan
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--no-access-log", "--log-level", "warning"]
+# Menjalankan 4 worker agar mampu menjenuhkan seluruh vCPU pada Target Instance
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4", "--no-access-log", "--log-level", "warning"]

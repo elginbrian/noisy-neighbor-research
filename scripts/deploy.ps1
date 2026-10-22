@@ -19,6 +19,8 @@ $targetPublicIp  = (terraform "-chdir=$tf" output -raw target_public_ip)
 $targetPrivateIp = (terraform "-chdir=$tf" output -raw target_private_ip)
 $testerPublicIp  = (terraform "-chdir=$tf" output -raw tester_public_ip)
 $testerPrivateIp = (terraform "-chdir=$tf" output -raw tester_private_ip)
+$targetInstanceId = (terraform "-chdir=$tf" output -raw target_instance_id)
+$awsRegion        = (terraform "-chdir=$tf" output -raw aws_region)
 
 Write-Host ""
 Write-Host "=================================================================" -ForegroundColor Cyan
@@ -156,38 +158,102 @@ Write-Host "Dashboard Web URL  : http://${testerPublicIp}:8080" -ForegroundColor
 Write-Host "                     (Buka di browser untuk memantau progres & unduh .zip)" -ForegroundColor DarkCyan
 Write-Host ""
 Write-Host "Pilih aksi yang ingin dijalankan sekarang:" -ForegroundColor Yellow
-Write-Host " [1] Pilot Study Test (16 sel x 1 replikasi)" -ForegroundColor White
+Write-Host " [1] Pilot Test (16 sel x 1 replikasi)" -ForegroundColor White
 Write-Host " [2] Single Cell Test (Sel 1)" -ForegroundColor White
 Write-Host " [3] Single Cell Test (Sel 16)" -ForegroundColor White
-Write-Host " [4] Full Experiment (16 sel x 5 replikasi)" -ForegroundColor White
+Write-Host " [4] Full Test (16 sel x 5 replikasi)" -ForegroundColor Green
+Write-Host " [5] Monitor Status" -ForegroundColor Cyan
 Write-Host " [0] Selesai" -ForegroundColor Gray
 Write-Host ""
 
-$pilihan = Read-Host "Masukkan nomor pilihan [0-4]"
+function Start-RemoteExperiment {
+    param(
+        [string]$Mode,
+        [string]$ExtraArgs = ""
+    )
+
+    $ErrorActionPreference = "Continue"
+    $chk = @(ssh -n -i $key -o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ConnectTimeout=5 ubuntu@$testerPublicIp "tmux has-session -t orchestrator 2>/dev/null && echo RUNNING || echo STOPPED")
+    $isRunning = ($chk -join "").Trim()
+    $ErrorActionPreference = "Stop"
+
+    if ($isRunning -eq "RUNNING") {
+        Write-Host ""
+        Write-Host "Sesi pengujian orchestrator sudah aktif di latar belakang." -ForegroundColor Yellow
+        Write-Host "Dashboard Web: http://${testerPublicIp}:8080" -ForegroundColor Cyan
+        Write-Host ""
+        $act = Read-Host "Pilih: [1] Live Log | [2] Attach Tmux | [3] Hentikan & Mulai Ulang | [0] Batal"
+        if ($act -eq "1") {
+            Write-Host "`nMenghubungkan ke live log... Tekan Ctrl+C untuk kembali`n" -ForegroundColor DarkGray
+            ssh -t -i $key ubuntu@$testerPublicIp "tail -f -n 40 /home/ubuntu/orchestrator.log"
+            return
+        } elseif ($act -eq "2") {
+            Write-Host "`nMenghubungkan ke tmux... Tekan Ctrl+B lalu D untuk keluar`n" -ForegroundColor DarkGray
+            ssh -t -i $key ubuntu@$testerPublicIp "tmux attach -t orchestrator"
+            return
+        } elseif ($act -eq "3") {
+            Write-Host "`nMenghentikan sesi lama..." -ForegroundColor DarkYellow
+            ssh -n -i $key -o StrictHostKeyChecking=accept-new -o BatchMode=yes ubuntu@$testerPublicIp "tmux kill-session -t orchestrator 2>/dev/null; pkill -f 'runner.py' 2>/dev/null || true"
+            Start-Sleep -Seconds 2
+        } else {
+            return
+        }
+    }
+
+    Write-Host "`nMenjalankan pengujian mode '$Mode' di latar belakang..." -ForegroundColor Green
+    
+    # Pastikan boto3 tersedia di Tester untuk pemulihan otomatis Target
+    ssh -n -i $key -o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ConnectTimeout=10 ubuntu@$testerPublicIp "python3 -c 'import boto3' 2>/dev/null || sudo pip3 install -q boto3"
+
+    # Jalankan di dalam sesi tmux pada Tester Instance dengan output otomatis di-pipe ke orchestrator.log
+    $startCmd = "tmux new-session -d -s orchestrator 'python3 /home/ubuntu/orchestrator/runner.py --target-ip $targetPrivateIp --target-instance-id $targetInstanceId --region $awsRegion --mode $Mode $ExtraArgs 2>&1 | tee -a /home/ubuntu/orchestrator.log'"
+    ssh -n -i $key -o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ConnectTimeout=10 ubuntu@$testerPublicIp $startCmd
+
+    Start-Sleep -Seconds 2
+
+    Write-Host ""
+    Write-Host "=================================================================" -ForegroundColor Green
+    Write-Host " PENGUJIAN BERHASIL DIMULAI DI LATAR BELAKANG CLOUD              " -ForegroundColor Green
+    Write-Host "=================================================================" -ForegroundColor Green
+    Write-Host "Lokasi Proses : Tester Instance - $testerPublicIp" -ForegroundColor White
+    Write-Host "Dashboard Web : http://${testerPublicIp}:8080" -ForegroundColor Cyan
+    Write-Host "Perintah Cek  : .\scripts\monitor.ps1" -ForegroundColor White
+    Write-Host "Tarik Hasil   : .\scripts\pull_results.ps1" -ForegroundColor White
+    Write-Host "=================================================================" -ForegroundColor Green
+    Write-Host ""
+
+    $watch = Read-Host "Tampilkan live log sekarang? [Y/n]"
+    if ($watch -notmatch "^[Nn]") {
+        Write-Host "`nMenghubungkan ke live log... Tekan Ctrl+C untuk kembali`n" -ForegroundColor DarkGray
+        ssh -t -i $key ubuntu@$testerPublicIp "tail -f -n 40 /home/ubuntu/orchestrator.log"
+    }
+}
+
+$pilihan = Read-Host "Masukkan nomor pilihan [0-5]"
 
 switch ($pilihan) {
     "1" {
-        Write-Host "`nMemulai Pilot Study dari Tester Instance..." -ForegroundColor Green
-        ssh -t -i $key ubuntu@$testerPublicIp "python3 /home/ubuntu/orchestrator/runner.py --target-ip $targetPrivateIp --mode pilot"
+        Start-RemoteExperiment -Mode "pilot" -ExtraArgs "--resume"
     }
     "2" {
-        Write-Host "`nMemulai pengujian Sel 1 (Kontrol)..." -ForegroundColor Green
-        ssh -t -i $key ubuntu@$testerPublicIp "python3 /home/ubuntu/orchestrator/runner.py --target-ip $targetPrivateIp --mode single --cell 1"
+        Start-RemoteExperiment -Mode "single" -ExtraArgs "--cell 1"
     }
     "3" {
-        Write-Host "`nMemulai pengujian Sel 16 (Limit Ketat)..." -ForegroundColor Green
-        ssh -t -i $key ubuntu@$testerPublicIp "python3 /home/ubuntu/orchestrator/runner.py --target-ip $targetPrivateIp --mode single --cell 16"
+        Start-RemoteExperiment -Mode "single" -ExtraArgs "--cell 16"
     }
     "4" {
-        Write-Host "`nMemulai Full Experiment 80 Sesi..." -ForegroundColor Green
-        ssh -t -i $key ubuntu@$testerPublicIp "python3 /home/ubuntu/orchestrator/runner.py --target-ip $targetPrivateIp --mode full"
+        Start-RemoteExperiment -Mode "full" -ExtraArgs "--resume"
+    }
+    "5" {
+        & (Join-Path $PSScriptRoot "monitor.ps1")
     }
     Default {
         Write-Host "`nInfrastruktur aktif dan siap digunakan kapan saja." -ForegroundColor Cyan
         Write-Host "Perintah SSH manual:"
         Write-Host "  Target : ssh -i $key ubuntu@$targetPublicIp"
         Write-Host "  Tester : ssh -i $key ubuntu@$testerPublicIp"
-        Write-Host "Untuk menjalankan orkestrator manual di Tester:"
-        Write-Host "  python3 /home/ubuntu/orchestrator/runner.py --target-ip $targetPrivateIp --mode pilot"
+        Write-Host "Perintah Monitor & Tarik Hasil:"
+        Write-Host "  .\scripts\monitor.ps1"
+        Write-Host "  .\scripts\pull_results.ps1"
     }
 }

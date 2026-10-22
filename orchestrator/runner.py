@@ -11,6 +11,7 @@ Mengoordinasikan:
 """
 
 import argparse
+import json
 import sys
 import time
 from pathlib import Path
@@ -22,10 +23,15 @@ if str(CURRENT_DIR) not in sys.path:
 from dashboard import ExperimentState, start_dashboard_server
 from matrix import EXPERIMENT_CELLS, generate_session_plan
 from session_runner import SessionRunner
+from recovery import TargetRecovery
 from ssh_client import SSHClient
 
 
 def main():
+    # Pastikan log langsung muncul meski output di-pipe ke tee
+    sys.stdout.reconfigure(line_buffering=True)
+    sys.stderr.reconfigure(line_buffering=True)
+
     parser = argparse.ArgumentParser(description="Skrip Otomasi Pengujian (Tester Instance)")
     parser.add_argument("--target-ip", required=True, help="IP privat/publik Target Instance")
     parser.add_argument("--ssh-key", default="~/.ssh/noisy-neighbor", help="Path SSH private key")
@@ -40,6 +46,11 @@ def main():
     parser.add_argument("--dashboard-port", type=int, default=8080, help="Port web server dashboard (default: 8080)")
     parser.add_argument("--no-dashboard", action="store_true", help="Nonaktifkan web dashboard")
     parser.add_argument("--dry-run", action="store_true", help="Cetak rencana sesi tanpa eksekusi")
+    parser.add_argument("--resume", action="store_true", default=True, help="Lewati sesi yang sudah selesai (default: True)")
+    parser.add_argument("--no-resume", action="store_false", dest="resume", help="Ulangi dari awal tanpa melewati sesi yang sudah ada")
+    parser.add_argument("--target-instance-id", default=None, help="ID EC2 Target Instance untuk reboot otomatis saat hang")
+    parser.add_argument("--region", default="ap-southeast-2", help="Region AWS Target Instance")
+    parser.add_argument("--max-attempts", type=int, default=3, help="Maksimal percobaan per sesi dengan pemulihan otomatis (default: 3)")
 
     args = parser.parse_args()
 
@@ -86,8 +97,9 @@ def main():
 
     # 3. Inisialisasi Klien SSH dan Verifikasi Koneksi
     ssh = SSHClient(host=args.target_ip, user=args.ssh_user, key_path=args.ssh_key)
+    recovery = TargetRecovery(ssh, instance_id=args.target_instance_id, region=args.region)
     print("[Orkestrator] Memeriksa konektivitas SSH ke Target Instance...")
-    if not ssh.check_connection():
+    if not recovery.is_healthy() and not recovery.recover():
         print(f"[Orkestrator] ERROR: Tidak dapat terhubung ke {args.ssh_user}@{args.target_ip} via SSH!", file=sys.stderr)
         sys.exit(1)
     print("[Orkestrator] Koneksi SSH terverifikasi aktif.\n")
@@ -106,12 +118,48 @@ def main():
     failed = 0
 
     for idx, session in enumerate(sessions, 1):
+        sess_id = session["session_id"]
+        combined_file = output_dir / f"combined_{sess_id}.json"
+        metrics_file = output_dir / f"metrics_{sess_id}.csv"
+
+        # Periksa apakah sesi ini sudah sukses dieksekusi sebelumnya jika mode resume aktif
+        if args.resume and combined_file.exists() and metrics_file.exists():
+            try:
+                with open(combined_file, "r", encoding="utf-8") as f:
+                    prev_data = json.load(f)
+                if prev_data.get("target_metrics") and prev_data.get("jmeter_metrics"):
+                    print(f"\n-------------------------------------------------------------")
+                    print(f"Sesi [{idx}/{len(sessions)}]: {sess_id} ({session['cell_name']}) SUDAH SELESAI sebelumnya. Melewati...")
+                    print(f"-------------------------------------------------------------")
+                    state.complete_session(prev_data)
+                    completed += 1
+                    continue
+            except Exception:
+                pass  # Jika berkas korup, ulangi eksekusi sesi ini
+
         print(f"\n-------------------------------------------------------------")
-        print(f"Mengeksekusi Sesi [{idx}/{len(sessions)}]: {session['session_id']} ({session['cell_name']})")
+        print(f"Mengeksekusi Sesi [{idx}/{len(sessions)}]: {sess_id} ({session['cell_name']})")
         print(f"-------------------------------------------------------------")
 
-        state.set_current_session(session, "Mempersiapkan Target Instance...")
-        result = runner.execute_session(session, output_dir)
+        result = None
+        for attempt in range(1, args.max_attempts + 1):
+            # Pastikan Target sehat sebelum sesi; pulihkan otomatis jika hang
+            if not recovery.is_healthy():
+                state.set_current_session(session, "Pemulihan otomatis Target Instance...")
+                if not recovery.recover():
+                    continue
+
+            state.set_current_session(session, "Mempersiapkan Target Instance...")
+            try:
+                result = runner.execute_session(session, output_dir)
+            except Exception as e:  # noqa: BLE001
+                print(f"[{sess_id}] ERROR saat eksekusi sesi: {e}", file=sys.stderr)
+                result = None
+
+            if result is not None:
+                break
+            if attempt < args.max_attempts:
+                print(f"[{sess_id}] Percobaan {attempt}/{args.max_attempts} gagal, memeriksa kondisi Target dan mengulang...")
         state.complete_session(result)
 
         if result is not None:

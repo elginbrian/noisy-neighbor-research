@@ -33,6 +33,7 @@ resource "aws_instance" "tester" {
   key_name               = aws_key_pair.main.key_name
   user_data              = file("${path.module}/user_data/tester_instance.sh")
   user_data_replace_on_change = true
+  iam_instance_profile   = aws_iam_instance_profile.tester.name
 
   credit_specification {
     cpu_credits = "unlimited"

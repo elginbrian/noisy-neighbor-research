@@ -137,6 +137,9 @@ class SessionRunner:
         # Beri jeda 2 detik memastikan tracker menulis data final
         time.sleep(2)
 
+        # Hentikan container segera agar Aggressor tidak terus membebani host Target
+        self.ssh.run("docker rm -f nn-aggressor nn-victim >/dev/null 2>&1 || true", timeout=30)
+
         # 4. Tarik berkas hasil dari Target Instance via SCP
         if self.state:
             self.state.update_stage("Menarik berkas log metrik via SCP...")
